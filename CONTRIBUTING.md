@@ -15,14 +15,14 @@ Errors from the new tab show in its DevTools console. Errors from the right-clic
 - **No secrets in code.** API keys belong in the Settings panel, which stores them in `chrome.storage.local`. Never commit a real key.
 - **Keep permissions tight.** A new data source needs its host added to `host_permissions` in `manifest.json`; say why in your PR.
 - **No remote code.** Manifest V3 forbids loading scripts from a CDN. Vendor small libraries into the repo and note their license in the README.
-- **Match the style.** Two-space indent, single quotes, `async`/`await`, and the section banners already in `script.js`.
+- **Match the style.** Two-space indent, single quotes, `async`/`await`, and the section banners used in `src/`. New features get their own module in `src/`, imported from `main.js`.
 - **Escape untrusted text.** Feed titles and API responses go through `esc()` before they reach `innerHTML`.
 
 ## Pull requests
 
 - Keep each PR to one change and describe what a user would see before and after.
 - Add a screenshot for visual changes.
-- CI checks that `manifest.json` is valid and every script parses. Run the same checks locally with `node --check script.js` and so on.
+- CI checks that `manifest.json` is valid, lints every script, and runs the unit tests. Run the same checks locally with `npm run lint` and `npm test`.
 
 ## Reporting bugs
 

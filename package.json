@@ -1,0 +1,10 @@
+{
+  "name": "crowsnest",
+  "private": true,
+  "description": "Development scripts for the Crowsnest extension. The extension itself has no build step.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "lint": "npx --yes eslint@10.1.0 ."
+  }
+}

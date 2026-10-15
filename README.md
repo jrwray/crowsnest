@@ -63,14 +63,22 @@ Crowsnest has no server and no analytics. Keys and data live in `chrome.storage`
 ```
 manifest.json     Extension manifest (MV3)
 index.html        The new tab page
-script.js         Dashboard logic: feeds, markets, weather, notes, settings
 styles.css        Theme, layout, CRT overlay
+src/              Dashboard logic as ES modules, one per feature
+  main.js           Entry point: first-run setup and start-up order
+  feeds.js          News sources (HN, Lobsters, Reddit, Lemmy, RSS, ...)
+  news.js           Feed cards, article modal, source settings
+  markets.js        Watchlist, ticker tape, quote details
+  stooq.js          Stock quote parsing (pure, unit-tested)
+  monitors.js       Uptime checks
+  weather.js, clock.js, notes.js, tasks.js, shortcuts.js, art.js, ...
 background.js     Service worker: right-click "search selection" menu
 maps-content.js   Content script: acreage on Google Maps measurements
-quill.*           Vendored Quill 1.3.7 rich-text editor (BSD-3-Clause)
+vendor/quill/     Vendored Quill 1.3.7 rich-text editor (BSD-3-Clause)
+test/             Unit tests (Node's built-in test runner)
 ```
 
-No build step and no dependencies to install. Edit a file, then click the reload icon on `chrome://extensions`.
+No build step and no dependencies to install. Edit a file, then click the reload icon on `chrome://extensions`. To run the checks CI runs, use `npm test` and `npm run lint` (Node 20+).
 
 ## Contributing
 
