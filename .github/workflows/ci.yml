@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate manifest.json
+        run: |
+          jq -e '.manifest_version == 3 and (.version | type == "string")' manifest.json
+
+      - name: Syntax-check scripts
+        run: |
+          for f in script.js background.js maps-content.js; do node --check "$f"; done
+
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release:
+    needs: check
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package extension
+        run: |
+          zip -r "crowsnest-${GITHUB_REF_NAME}.zip" manifest.json index.html script.js styles.css \
+            background.js maps-content.js quill.min.js quill.snow.css icons 2>/dev/null || \
+          zip -r "crowsnest-${GITHUB_REF_NAME}.zip" manifest.json index.html script.js styles.css \
+            background.js maps-content.js quill.min.js quill.snow.css
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: crowsnest-*.zip
+          generate_release_notes: true

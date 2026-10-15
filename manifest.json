@@ -1,0 +1,57 @@
+{
+  "manifest_version": 3,
+  "name": "Crowsnest",
+  "version": "1.2.0",
+  "description": "A hacker-flavored new tab dashboard: feeds, markets, weather, tasks, notes, art, and an optional Claude assistant.",
+  "chrome_url_overrides": {
+    "newtab": "index.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "storage",
+    "geolocation",
+    "tabs",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "https://api.open-meteo.com/*",
+    "https://geocoding-api.open-meteo.com/*",
+    "https://api.zippopotam.us/*",
+    "https://hacker-news.firebaseio.com/*",
+    "https://zenquotes.io/*",
+    "https://uselessfacts.jsph.pl/*",
+    "https://old.reddit.com/*",
+    "https://lemmy.world/*",
+    "https://lobste.rs/*",
+    "https://gnews.io/*",
+    "https://dev.to/*",
+    "https://api.producthunt.com/*",
+    "https://api.rss2json.com/*",
+    "https://openaccess-api.clevelandart.org/*",
+    "https://api.artic.edu/*",
+    "https://www.artic.edu/*",
+    "https://collectionapi.metmuseum.org/*",
+    "https://images.metmuseum.org/*",
+    "https://api.coingecko.com/*",
+    "https://stooq.com/*",
+    "https://api.anthropic.com/*",
+    "https://www.google.com/maps/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.google.com/maps/*"
+      ],
+      "js": [
+        "maps-content.js"
+      ],
+      "run_at": "document_end",
+      "all_frames": false
+    }
+  ]
+}

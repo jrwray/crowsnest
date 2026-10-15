@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Crowsnest</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=VT323&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="quill.snow.css">
+  <link rel="stylesheet" href="styles.css?v=7">
+</head>
+<body class="theme-dark">
+
+<!-- CRT overlay (scanlines + vignette + flicker) -->
+<div class="crt-overlay" aria-hidden="true"></div>
+
+<div id="app">
+
+  <!-- ── Top bar ── -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <span id="time" class="topbar-time">--:--:--</span>
+      <div class="weather-group">
+        <span id="weather" class="topbar-weather">booting weather…</span>
+        <button id="toggle-zip" class="icon-btn" title="Set location">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+          </svg>
+        </button>
+      </div>
+      <div id="zip-row" class="zip-row hidden">
+        <input id="zip-input" type="text" placeholder="ZIP or city" maxlength="40" />
+        <button id="set-zip" class="btn-tonal btn-sm">Set</button>
+      </div>
+    </div>
+    <h1 id="greeting" class="topbar-greeting"></h1>
+    <div class="topbar-right">
+      <button id="default-tabs" class="icon-btn" title="Tab sets">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M3 3h8v8H3zm0 10h8v8H3zm10-10h8v8h-8zm0 10h8v8h-8z"/>
+        </svg>
+      </button>
+      <button id="server-status" class="icon-btn" title="Monitors">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+        </svg>
+      </button>
+      <button id="open-settings" class="icon-btn" title="Settings">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19.14 12.94a7.49 7.49 0 0 0 .05-.94 7.49 7.49 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7 7 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54a7 7 0 0 0-1.62.94l-2.39-.96a.5.5 0 0 0-.61.22L2.74 8.3a.5.5 0 0 0 .12.64l2.03 1.58a7.49 7.49 0 0 0 0 1.88L2.86 14a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .61.22l2.39-.96a7 7 0 0 0 1.62.94l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54a7 7 0 0 0 1.62-.94l2.39.96a.5.5 0 0 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/>
+        </svg>
+      </button>
+      <button id="mode-toggle" class="icon-btn" title="Toggle theme" aria-pressed="false">
+        <svg id="theme-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path id="theme-icon-path" d=""/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── Market ticker tape ── -->
+  <div id="ticker-tape" class="ticker-tape hidden" aria-label="Market ticker"></div>
+
+  <!-- ── Hero ── -->
+  <section class="hero">
+    <div class="hero-row">
+    <div class="search-wrap">
+      <div class="search-bar" id="search-bar">
+        <span class="search-prompt" aria-hidden="true">&gt;_</span>
+        <input id="search" type="text" placeholder="type a query…" autocomplete="off" spellcheck="false" />
+        <span id="search-spinner" class="search-spinner hidden" aria-hidden="true"></span>
+      </div>
+      <div class="mode-chips" id="mode-chips">
+        <button class="chip active" data-mode="search">Search</button>
+        <button class="chip" data-mode="dev">Dev</button>
+        <button class="chip" data-mode="chat">Chat</button>
+        <button class="chip" data-mode="research">Research</button>
+        <button class="chip chip-ai" data-mode="ask">Ask ✦</button>
+      </div>
+      <div id="ask-answer" class="ask-answer hidden"></div>
+    </div>
+
+    <blockquote id="quote" class="hero-quote"></blockquote>
+    </div>
+  </section>
+
+  <!-- ── Main grid ── -->
+  <div class="main-grid">
+
+    <!-- News -->
+    <section class="card news-card">
+      <div class="card-header">
+        <h2 class="card-title">Feeds</h2>
+        <div class="card-header-actions">
+          <span id="news-status" class="status-label"></span>
+          <button id="refresh-news" class="icon-btn" title="Refresh feeds">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+            </svg>
+          </button>
+          <button id="config-open" class="btn-text">Sources</button>
+        </div>
+      </div>
+      <div class="news-toolbar">
+        <div class="news-search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          <input id="news-filter" type="text" placeholder="filter…" autocomplete="off" />
+        </div>
+        <select id="news-sort" class="news-sort" title="Sort">
+          <option value="newest">newest</option>
+          <option value="oldest">oldest</option>
+          <option value="source">by source</option>
+        </select>
+      </div>
+      <div id="news-list" class="news-grid" aria-live="polite"></div>
+    </section>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+
+      <!-- Tasks -->
+      <div class="card tasks-card">
+        <div class="card-header">
+          <h2 class="card-title">Tasks</h2>
+          <button id="clear-todo" class="btn-text">Clear done</button>
+        </div>
+        <ul id="todo-list" class="todo-list"></ul>
+        <div class="add-row">
+          <input id="todo-input" type="text" placeholder="add a task…" />
+          <button id="add-todo" class="btn-filled">Add</button>
+        </div>
+      </div>
+
+      <!-- Shortcuts -->
+      <div class="card shortcuts-card">
+        <div class="card-header">
+          <h2 class="card-title">Shortcuts</h2>
+          <button id="clear-links" class="btn-text">Clear all</button>
+        </div>
+        <ul id="link-list" class="link-list"></ul>
+        <div class="add-row add-row--stacked">
+          <input id="link-name" type="text" placeholder="name" />
+          <input id="link-url"  type="text" placeholder="https://" />
+          <button id="add-link" class="btn-filled">Add</button>
+        </div>
+        <p id="link-error" class="field-error hidden"></p>
+      </div>
+
+      <!-- Notes -->
+      <div class="card notes-card">
+        <div class="card-header">
+          <h2 class="card-title">Notes</h2>
+          <span id="notes-status" class="status-label"></span>
+        </div>
+        <div id="notes-editor" class="notes-editor"></div>
+      </div>
+
+    </aside>
+  </div>
+
+  <!-- ── Art strip ── -->
+  <div class="art-row">
+    <div id="art-content" class="art-strip"></div>
+    <div class="art-actions">
+      <button id="art-random" class="btn-text" title="Random artwork">⟳ random</button>
+    </div>
+  </div>
+
+  <!-- ── Fun-fact ticker ── -->
+  <footer class="ticker">
+    <span class="ticker-prompt" aria-hidden="true">// TIL</span>
+    <p id="fun-fact" class="ticker-fact"></p>
+  </footer>
+
+</div><!-- /#app -->
+
+<!-- ── Config modal (feed sources) ── -->
+<div id="config-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Feed configuration">
+  <div class="modal-scrim" data-close="config"></div>
+  <div class="modal-dialog card">
+    <div class="modal-header">
+      <h3 class="modal-title">Feed Sources</h3>
+      <button id="config-close" class="icon-btn" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+    </div>
+    <div class="config-grid">
+      <label class="config-item"><span class="config-check"><input type="checkbox" data-source="hackernews" /> Hacker News</span><span class="config-count">Count <input type="number" min="1" max="15" data-count="hackernews" value="3" /></span></label>
+      <label class="config-item"><span class="config-check"><input type="checkbox" data-source="lobsters" /> Lobsters</span><span class="config-count">Count <input type="number" min="1" max="15" data-count="lobsters" value="5" /></span></label>
+      <label class="config-item"><span class="config-check"><input type="checkbox" data-source="reddit" /> Reddit</span><span class="config-count">Count <input type="number" min="1" max="15" data-count="reddit" value="3" /></span></label>
+      <label class="config-item"><span class="config-check"><input type="checkbox" data-source="lemmy" /> Lemmy</span><span class="config-count">Count <input type="number" min="1" max="15" data-count="lemmy" value="5" /></span></label>
+      <label class="config-item"><span class="config-check"><input type="checkbox" data-source="gnews" /> GNews</span><span class="config-count">Count <input type="number" min="1" max="15" data-count="gnews" value="5" /></span></label>
+      <label class="config-item"><span class="config-check"><input type="checkbox" data-source="devto" /> Dev.to</span><span class="config-count">Count <input type="number" min="1" max="15" data-count="devto" value="5" /></span></label>
+      <label class="config-item"><span class="config-check"><input type="checkbox" data-source="producthunt" /> Product Hunt</span><span class="config-count">Count <input type="number" min="1" max="15" data-count="producthunt" value="3" /></span></label>
+      <label class="config-item"><span class="config-check"><input type="checkbox" data-source="techcrunch" /> TechCrunch</span><span class="config-count">Count <input type="number" min="1" max="15" data-count="techcrunch" value="4" /></span></label>
+      <label class="config-item"><span class="config-check"><input type="checkbox" data-source="theverge" /> The Verge</span><span class="config-count">Count <input type="number" min="1" max="15" data-count="theverge" value="4" /></span></label>
+      <label class="config-item"><span class="config-check"><input type="checkbox" data-source="arstechnica" /> Ars Technica</span><span class="config-count">Count <input type="number" min="1" max="15" data-count="arstechnica" value="4" /></span></label>
+      <label class="config-item"><span class="config-check"><input type="checkbox" data-source="engadget" /> Engadget</span><span class="config-count">Count <input type="number" min="1" max="15" data-count="engadget" value="4" /></span></label>
+      <label class="config-item"><span class="config-check"><input type="checkbox" data-source="hackernoon" /> HackerNoon</span><span class="config-count">Count <input type="number" min="1" max="15" data-count="hackernoon" value="4" /></span></label>
+      <label class="config-item"><span class="config-check"><input type="checkbox" data-source="venturebeat" /> VentureBeat AI</span><span class="config-count">Count <input type="number" min="1" max="15" data-count="venturebeat" value="4" /></span></label>
+    </div>
+    <div class="config-sub">
+      <label class="config-field">
+        <span>Reddit subs <small>(comma-separated, e.g. r/programming, r/worldnews)</small></span>
+        <input id="config-reddit-subs" type="text" placeholder="r/programming, r/technology" />
+      </label>
+      <label class="config-field">
+        <span>Custom RSS feeds <small>(comma-separated URLs, via rss2json)</small></span>
+        <input id="config-rss" type="text" placeholder="https://example.com/feed.xml" />
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button id="config-cancel" class="btn-text">Cancel</button>
+      <button id="config-save"   class="btn-filled">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Settings modal ── -->
+<div id="settings-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Settings">
+  <div class="modal-scrim" data-close="settings"></div>
+  <div class="modal-dialog card">
+    <div class="modal-header">
+      <h3 class="modal-title">Settings</h3>
+      <button id="settings-close" class="icon-btn" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+    </div>
+    <div class="settings-body">
+      <label class="config-field">
+        <span>Your name <small>(used in greetings)</small></span>
+        <input id="set-user-name" type="text" placeholder="operator" maxlength="40" autocomplete="off" />
+      </label>
+      <label class="config-field">
+        <span>Anthropic API key <small>(stored locally, used for Ask + summaries)</small></span>
+        <input id="set-anthropic-key" type="password" placeholder="sk-ant-…" autocomplete="off" />
+      </label>
+      <label class="config-field">
+        <span>Claude model</span>
+        <input id="set-anthropic-model" type="text" placeholder="claude-haiku-4-5-20251001" />
+      </label>
+      <label class="config-field">
+        <span>GNews API key <small>(optional)</small></span>
+        <input id="set-gnews-key" type="password" placeholder="gnews token" autocomplete="off" />
+      </label>
+      <label class="config-field">
+        <span>Accent color</span>
+        <select id="set-accent">
+          <option value="blue">Blue</option>
+          <option value="green">Green</option>
+        </select>
+      </label>
+      <label class="config-check-row">
+        <input type="checkbox" id="set-art-auto" />
+        <span>Open the artwork modal automatically on each new tab</span>
+      </label>
+      <div class="config-field">
+        <span>Backup <small>(local JSON — includes API keys; dev use)</small></span>
+        <div class="backup-row">
+          <button type="button" id="export-backup" class="btn-tonal btn-sm">⭳ Export</button>
+          <button type="button" id="import-backup" class="btn-tonal btn-sm">⭱ Import</button>
+          <input type="file" id="import-file" accept="application/json,.json" hidden />
+        </div>
+      </div>
+      <p id="settings-status" class="field-error hidden"></p>
+    </div>
+    <div class="modal-actions">
+      <button id="settings-cancel" class="btn-text">Cancel</button>
+      <button id="settings-save" class="btn-filled">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Tab sets modal ── -->
+<div id="tabs-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Tab sets">
+  <div class="modal-scrim" data-close="tabs"></div>
+  <div class="modal-dialog card">
+    <div class="modal-header">
+      <h3 class="modal-title">Tab Sets</h3>
+      <button id="tabs-close" class="icon-btn" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+    </div>
+    <div id="tabsets-list" class="tabsets-list"></div>
+    <div class="tabset-new">
+      <input id="tabset-name" type="text" placeholder="set name (e.g. Morning)" />
+      <textarea id="tabset-urls" placeholder="one URL per line"></textarea>
+      <button id="tabset-add" class="btn-filled">Save set</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Monitors modal ── -->
+<div id="monitors-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Monitors">
+  <div class="modal-scrim" data-close="monitors"></div>
+  <div class="modal-dialog card">
+    <div class="modal-header">
+      <h3 class="modal-title">Monitors</h3>
+      <button id="monitors-close" class="icon-btn" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+    </div>
+    <div class="tabs-row" id="monitor-tabs">
+      <button class="tab-btn active" data-tab="uptime">Uptime</button>
+      <button class="tab-btn" data-tab="markets">Markets</button>
+    </div>
+
+    <div class="tab-panel" data-panel="uptime">
+      <ul id="uptime-list" class="monitor-list"></ul>
+      <div class="add-row">
+        <input id="uptime-url" type="text" placeholder="https://service.to/check" />
+        <button id="uptime-add" class="btn-filled">Watch</button>
+      </div>
+      <button id="uptime-refresh" class="btn-text">⟳ re-check all</button>
+    </div>
+
+    <div class="tab-panel hidden" data-panel="markets">
+      <ul id="markets-list" class="monitor-list"></ul>
+      <div class="add-row">
+        <input id="market-symbol" type="text" placeholder="e.g.  solana   or   $NVDA" />
+        <button id="market-add" class="btn-filled">Track</button>
+      </div>
+      <p class="hint">Crypto = CoinGecko id: <b>bitcoin · ethereum · solana · dogecoin · ripple</b>.<br>Stocks = <b>$</b> + ticker: <b>$NVDA · $TSLA · $AMD · $AAPL</b>. Non-US needs a suffix: <b>$BMW.DE</b>, <b>$SHOP.CA</b>.</p>
+      <button id="markets-refresh" class="btn-text">⟳ refresh prices</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Article / AI summary modal ── -->
+<div id="article-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Article">
+  <div class="modal-scrim" data-close="article"></div>
+  <div class="modal-dialog card">
+    <div class="modal-header">
+      <h3 class="modal-title" id="article-title">Article</h3>
+      <button id="article-close" class="icon-btn" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+    </div>
+    <img id="article-img" class="article-img hidden" alt="" />
+    <div class="article-meta">
+      <span id="article-source" class="source-chip"></span>
+      <a id="article-link" class="article-open" target="_blank" rel="noopener noreferrer">open original ↗</a>
+      <a id="article-extra" class="article-open hidden" target="_blank" rel="noopener noreferrer">open article ↗</a>
+    </div>
+    <div id="article-summary" class="article-summary"></div>
+  </div>
+</div>
+
+<!-- ── Market detail modal ── -->
+<div id="market-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Market detail">
+  <div class="modal-scrim" data-close="market"></div>
+  <div class="modal-dialog card">
+    <div class="modal-header">
+      <h3 class="modal-title" id="market-modal-title">—</h3>
+      <button class="icon-btn" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+    </div>
+    <div id="market-modal-body" class="market-detail"></div>
+    <div id="market-modal-links" class="market-links"></div>
+  </div>
+</div>
+
+<!-- ── Lightbox ── -->
+<div id="lightbox" class="lightbox hidden" aria-hidden="true">
+  <div class="lightbox-scrim"></div>
+  <div class="lightbox-body">
+    <button id="lightbox-close" class="icon-btn lightbox-close" aria-label="Close">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+    </button>
+    <img id="lightbox-img" src="" alt="" />
+    <div class="lightbox-info">
+      <h3 id="art-modal-title" class="art-modal-title"></h3>
+      <p id="art-modal-meta" class="art-modal-meta"></p>
+      <p id="art-modal-about" class="art-modal-about hidden"></p>
+      <div class="art-modal-actions">
+        <a id="art-modal-link" class="article-open" target="_blank" rel="noopener noreferrer">view at museum ↗</a>
+        <button id="art-modal-ai" class="btn-text">✦ ask claude about this</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="quill.min.js"></script>
+<script src="script.js?v=11"></script>
+</body>
+</html>
