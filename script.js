@@ -45,7 +45,13 @@ function mkStore(area) {
   if (chromeArea) {
     return {
       get: keys => new Promise(res => chromeArea.get(keys, res)),
-      set: obj  => new Promise(res => chromeArea.set(obj, () => res())),
+      // Reject on quota or other errors so callers don't lose writes silently.
+      set: obj  => new Promise((res, rej) => chromeArea.set(obj, () => {
+        const err = chrome.runtime.lastError;
+        if (err) { console.error(`Crowsnest: ${area} storage write failed`, err.message); rej(new Error(err.message)); }
+        else res();
+      })),
+      remove: keys => new Promise(res => chromeArea.remove(keys, () => res())),
       getAll: () => new Promise(res => chromeArea.get(null, res))
     };
   }
@@ -57,8 +63,12 @@ function mkStore(area) {
       arr.forEach(k => { const v = localStorage.getItem(prefix + k); out[k] = v == null ? undefined : JSON.parse(v); });
       res(out);
     }),
-    set: obj => new Promise(res => {
-      Object.entries(obj).forEach(([k, v]) => localStorage.setItem(prefix + k, JSON.stringify(v)));
+    set: obj => new Promise((res, rej) => {
+      try { Object.entries(obj).forEach(([k, v]) => localStorage.setItem(prefix + k, JSON.stringify(v))); res(); }
+      catch (e) { rej(e); }
+    }),
+    remove: keys => new Promise(res => {
+      (Array.isArray(keys) ? keys : [keys]).forEach(k => localStorage.removeItem(prefix + k));
       res();
     }),
     getAll: () => new Promise(res => {
@@ -784,12 +794,12 @@ function renderNews(items) {
 }
 
 async function updateNews(force = false) {
-  const cacheKey = `news_${configKey()}`;
-  const cacheTimeKey = `newsTime_${configKey()}`;
+  const cacheKey = 'newsCache', cacheTimeKey = 'newsCacheTime', cacheCfgKey = 'newsCacheConfig';
   newsStatusEl.textContent = 'syncing…';
-  const cached = await localGet([cacheKey, cacheTimeKey]);
+  const cached = await localGet([cacheKey, cacheTimeKey, cacheCfgKey]);
   const now = Date.now();
-  const valid = cached[cacheKey] && (now - (cached[cacheTimeKey] ?? 0)) < CONFIG.cacheDurationMs;
+  const valid = cached[cacheKey] && cached[cacheCfgKey] === configKey() &&
+    (now - (cached[cacheTimeKey] ?? 0)) < CONFIG.cacheDurationMs;
 
   if (!force && valid) {
     ALL_NEWS = cached[cacheKey];
@@ -800,7 +810,7 @@ async function updateNews(force = false) {
   try {
     const items = await fetchAllNews();
     const top = items.slice(0, 24);
-    await localSet({ [cacheKey]: top, [cacheTimeKey]: now });
+    await localSet({ [cacheKey]: top, [cacheTimeKey]: now, [cacheCfgKey]: configKey() });
     ALL_NEWS = top;
     viewNews();
     newsStatusEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -956,7 +966,7 @@ function saveConfig() {
     const k = cb.dataset.source; if (CONFIG.sources[k]) CONFIG.sources[k].enabled = cb.checked;
   });
   configModal.querySelectorAll('[data-count]').forEach(inp => {
-    const k = inp.dataset.count; if (CONFIG.sources[k]) CONFIG.sources[k].count = Math.max(1, Number(inp.value) || 3);
+    const k = inp.dataset.count; if (CONFIG.sources[k]) CONFIG.sources[k].count = Math.min(15, Math.max(1, Number(inp.value) || 3));
   });
   CONFIG.sources.reddit.subs = cfgRedditSubs.value.split(',').map(s => s.trim()).filter(Boolean);
   CONFIG.sources.rss.feeds = cfgRss.value.split(',').map(s => s.trim()).filter(Boolean);
@@ -1027,8 +1037,11 @@ async function importBackup(file) {
   let data;
   try { data = JSON.parse(await file.text()); } catch { settingsStatus.textContent = 'Invalid JSON file.'; settingsStatus.classList.remove('hidden'); return; }
   if (!data || (data.app && !['crowsnest', 'agora'].includes(data.app))) { settingsStatus.textContent = 'Not a Crowsnest backup.'; settingsStatus.classList.remove('hidden'); return; }
-  if (data.sync && typeof data.sync === 'object') await syncSet(data.sync);
-  if (data.local && typeof data.local === 'object') await localSet(data.local);
+  // Older backups kept tasks and shortcuts in sync storage; those now live in local.
+  const { todos, links, ...syncRest } = (data.sync && typeof data.sync === 'object') ? data.sync : {};
+  const localData = { ...(todos && { todos }), ...(links && { links }), ...((data.local && typeof data.local === 'object') ? data.local : {}) };
+  await syncSet(syncRest);
+  await localSet(localData);
   settingsStatus.style.color = 'var(--primary)'; settingsStatus.textContent = 'Imported — reloading…'; settingsStatus.classList.remove('hidden');
   setTimeout(() => location.reload(), 700);
 }
@@ -1058,24 +1071,24 @@ function renderTodos(todos) {
     li.append(cb, span, del); todoListEl.appendChild(li);
   });
 }
-async function loadTodos() { const d = await syncGet('todos'); renderTodos(d.todos ?? []); }
+async function loadTodos() { const d = await localGet('todos'); renderTodos(d.todos ?? []); }
 async function addTodo() {
   const text = todoInputEl.value.trim(); if (!text) return;
-  const d = await syncGet('todos'); const todos = [...(d.todos ?? []), { text, done: false }];
-  await syncSet({ todos }); renderTodos(todos); todoInputEl.value = '';
+  const d = await localGet('todos'); const todos = [...(d.todos ?? []), { text, done: false }];
+  await localSet({ todos }); renderTodos(todos); todoInputEl.value = '';
 }
 async function toggleTodo(index) {
-  const d = await syncGet('todos'); const todos = d.todos ?? [];
+  const d = await localGet('todos'); const todos = d.todos ?? [];
   if (!todos[index]) return; todos[index].done = !todos[index].done;
-  await syncSet({ todos }); renderTodos(todos);
+  await localSet({ todos }); renderTodos(todos);
 }
 async function deleteTodo(index) {
-  const d = await syncGet('todos'); const todos = (d.todos ?? []).filter((_, i) => i !== index);
-  await syncSet({ todos }); renderTodos(todos);
+  const d = await localGet('todos'); const todos = (d.todos ?? []).filter((_, i) => i !== index);
+  await localSet({ todos }); renderTodos(todos);
 }
 async function clearDoneTodos() {
-  const d = await syncGet('todos'); const todos = (d.todos ?? []).filter(t => !t.done);
-  await syncSet({ todos }); renderTodos(todos);
+  const d = await localGet('todos'); const todos = (d.todos ?? []).filter(t => !t.done);
+  await localSet({ todos }); renderTodos(todos);
 }
 document.getElementById('add-todo').addEventListener('click', addTodo);
 document.getElementById('clear-todo').addEventListener('click', clearDoneTodos);
@@ -1102,20 +1115,20 @@ function renderLinks(links) {
     li.append(img, a, del); linkListEl.appendChild(li);
   });
 }
-async function loadLinks() { const d = await syncGet('links'); renderLinks(d.links ?? []); }
+async function loadLinks() { const d = await localGet('links'); renderLinks(d.links ?? []); }
 async function addLink() {
   const name = linkNameEl.value.trim(), url = linkUrlEl.value.trim();
   if (!name || !url) { showLinkError('Name and URL required.'); return; }
   if (!/^https?:\/\//i.test(url)) { showLinkError('URL must start with http:// or https://'); return; }
   linkErrorEl.classList.add('hidden');
-  const d = await syncGet('links'); const links = [...(d.links ?? []), { name, url }];
-  await syncSet({ links }); renderLinks(links); linkNameEl.value = ''; linkUrlEl.value = '';
+  const d = await localGet('links'); const links = [...(d.links ?? []), { name, url }];
+  await localSet({ links }); renderLinks(links); linkNameEl.value = ''; linkUrlEl.value = '';
 }
 async function deleteLink(index) {
-  const d = await syncGet('links'); const links = (d.links ?? []).filter((_, i) => i !== index);
-  await syncSet({ links }); renderLinks(links);
+  const d = await localGet('links'); const links = (d.links ?? []).filter((_, i) => i !== index);
+  await localSet({ links }); renderLinks(links);
 }
-async function clearAllLinks() { await syncSet({ links: [] }); renderLinks([]); }
+async function clearAllLinks() { await localSet({ links: [] }); renderLinks([]); }
 function showLinkError(msg) { linkErrorEl.textContent = msg; linkErrorEl.classList.remove('hidden'); }
 document.getElementById('add-link').addEventListener('click', addLink);
 document.getElementById('clear-links').addEventListener('click', clearAllLinks);
@@ -1306,15 +1319,23 @@ function renderUptime(targets) {
     li.append(dot, label, lat, del); uptimeListEl.appendChild(li);
   });
 }
+// state: 'up' (2xx), 'down' (error status, timeout or no answer), or 'reachable' when the
+// site answered but doesn't allow CORS, so the browser hides its status code.
 async function checkUptime(url) {
   const start = performance.now();
+  const elapsed = () => Math.round(performance.now() - start);
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 8000);
   try {
-    await fetch(url, { mode: 'no-cors', cache: 'no-store', signal: ctrl.signal });
-    clearTimeout(t);
-    return { up: true, ms: Math.round(performance.now() - start) };
-  } catch { clearTimeout(t); return { up: false, ms: null }; }
+    const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
+    return res.ok ? { state: 'up', ms: elapsed() } : { state: 'down', code: res.status };
+  } catch {
+    if (ctrl.signal.aborted) return { state: 'down' };
+    try {
+      await fetch(url, { mode: 'no-cors', cache: 'no-store', signal: ctrl.signal });
+      return { state: 'reachable', ms: elapsed() };
+    } catch { return { state: 'down' }; }
+  } finally { clearTimeout(t); }
 }
 async function checkAllUptime() {
   const items = [...uptimeListEl.querySelectorAll('.monitor-item')];
@@ -1322,8 +1343,10 @@ async function checkAllUptime() {
     const dot = li.querySelector('.status-dot'); const lat = li.querySelector('.monitor-latency');
     dot.className = 'status-dot status-pending'; lat.textContent = '…';
     const r = await checkUptime(li.dataset.url);
-    dot.className = 'status-dot ' + (r.up ? 'status-up' : 'status-down');
-    lat.textContent = r.up ? `${r.ms}ms` : 'down';
+    dot.className = `status-dot status-${r.state}`;
+    if (r.state === 'up') { lat.textContent = `${r.ms}ms`; li.title = 'Up'; }
+    else if (r.state === 'reachable') { lat.textContent = `${r.ms}ms?`; li.title = "The site answered, but it blocks reading its status code (no CORS), so an error page can't be ruled out."; }
+    else { lat.textContent = r.code ? `HTTP ${r.code}` : 'down'; li.title = r.code ? `Responded with HTTP ${r.code}` : 'No response'; }
   }));
 }
 async function addUptime() {
@@ -1381,54 +1404,50 @@ function startEditMarket(li, i, sym) {
   };
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); finish(); }
-    else if (e.key === 'Escape') { cancelled = true; finish(); }
+    else if (e.key === 'Escape') { e.stopPropagation(); cancelled = true; finish(); }
   });
   input.addEventListener('blur', finish);
 }
 
-async function refreshMarkets() {
-  const items = [...marketsListEl.querySelectorAll('.monitor-item')];
-  const cryptoIds = items.filter(li => !li.dataset.symbol.startsWith('$')).map(li => li.dataset.symbol.toLowerCase());
-  let cryptoData = {};
-  if (cryptoIds.length) {
-    try {
-      cryptoData = await safeFetch(`https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(cryptoIds.join(','))}&vs_currencies=usd&include_24hr_change=true`);
-    } catch {}
-  }
-  await Promise.all(items.map(async li => {
-    const sym = li.dataset.symbol;
-    const priceEl = li.querySelector('.market-price'); const chgEl = li.querySelector('.market-change');
-    if (sym.startsWith('$')) {
-      try {
-        // stooq.com free CSV quote (CORS-open). US tickers need a .us suffix.
-        let t = sym.slice(1).toLowerCase();
-        if (!t.includes('.')) t += '.us';
-        const res = await fetch(`https://stooq.com/q/l/?s=${encodeURIComponent(t)}&f=sd2t2ohlc&h&e=csv`, { cache: 'no-store' });
-        const text = await res.text();
-        const row = (text.trim().split('\n')[1] || '').split(',');
-        // Symbol,Date,Time,Open,High,Low,Close
-        const open = parseFloat(row[3]); const close = parseFloat(row[6]);
-        if (!isFinite(close)) throw new Error('no quote');
-        const pct = (isFinite(open) && open) ? ((close - open) / open) * 100 : 0;
-        priceEl.textContent = `$${close.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-        setChange(chgEl, pct);
-      } catch { priceEl.textContent = 'n/a'; chgEl.textContent = ''; }
-    } else {
-      const d = cryptoData[sym.toLowerCase()];
-      if (d) {
-        priceEl.textContent = `$${d.usd.toLocaleString(undefined, { maximumFractionDigits: d.usd < 1 ? 6 : 2 })}`;
-        setChange(chgEl, d.usd_24h_change ?? 0);
-      } else { priceEl.textContent = 'n/a'; chgEl.textContent = ''; }
-    }
-  }));
+// stooq.com CSV quote for a $TICKER (US tickers get a .us suffix). The change is measured
+// against the previous close when stooq returns one, otherwise against today's open, and
+// `basis` says which so the UI can label it.
+function stooqTicker(sym) {
+  let t = sym.replace(/^\$/, '').toLowerCase();
+  if (!t.includes('.')) t += '.us';
+  return t;
 }
-function setChange(el, pct) {
-  const sign = pct >= 0 ? '▲' : '▼';
-  el.textContent = `${sign} ${Math.abs(pct).toFixed(2)}%`;
-  el.className = 'market-change ' + (pct >= 0 ? 'up' : 'down');
+function parseStooqQuote(csv) {
+  const [head = '', line = ''] = csv.trim().split(/\r?\n/);
+  const cols = head.split(',').map(c => c.trim().toLowerCase());
+  const cells = line.split(',');
+  const nameAt = cols.indexOf('name');
+  const cell = name => {
+    const i = cols.findIndex(c => c === name || c.startsWith(name));
+    if (i < 0) return undefined;
+    return i === nameAt ? cells.slice(i).join(',').replace(/^"|"$/g, '') : cells[i];
+  };
+  const num = name => { const v = parseFloat(cell(name)); return isFinite(v) ? v : null; };
+  const close = num('close');
+  if (close == null) throw new Error('no quote (check symbol; non-US needs a suffix)');
+  const open = num('open'), prev = num('prev');
+  const basis = prev ? 'prev' : 'open';
+  const ref = prev || open;
+  return {
+    name: cell('name') || null, date: cell('date') || null,
+    open, high: num('high'), low: num('low'), close, volume: num('volume'), prevClose: prev,
+    pct: ref ? ((close - ref) / ref) * 100 : 0, basis
+  };
 }
+async function fetchStockQuote(sym) {
+  const t = stooqTicker(sym);
+  const res = await fetch(`https://stooq.com/q/l/?s=${encodeURIComponent(t)}&f=sd2t2ohlcvpn&h&e=csv`, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return parseStooqQuote(await res.text());
+}
+const BASIS_LABEL = { prev: 'vs previous close', open: "vs today's open", '24h': 'over 24 hours' };
 
-// Shared quote fetch (crypto via CoinGecko, $stocks via stooq) for the marquee.
+// Quotes for a watchlist: crypto via CoinGecko (one batched call), $stocks via stooq.
 async function fetchMarketQuotes(symbols) {
   const cryptoIds = symbols.filter(s => !s.startsWith('$')).map(s => s.toLowerCase());
   let crypto = {};
@@ -1437,19 +1456,32 @@ async function fetchMarketQuotes(symbols) {
   }
   return Promise.all(symbols.map(async sym => {
     if (sym.startsWith('$')) {
-      try {
-        let t = sym.slice(1).toLowerCase(); if (!t.includes('.')) t += '.us';
-        const res = await fetch(`https://stooq.com/q/l/?s=${encodeURIComponent(t)}&f=sd2t2ohlc&h&e=csv`, { cache: 'no-store' });
-        const row = ((await res.text()).trim().split('\n')[1] || '').split(',');
-        const open = parseFloat(row[3]), close = parseFloat(row[6]);
-        if (!isFinite(close)) throw 0;
-        return { sym, label: sym.slice(1).toUpperCase(), price: close, pct: (isFinite(open) && open) ? ((close - open) / open) * 100 : 0, ok: true };
-      } catch { return { sym, label: sym.slice(1).toUpperCase(), ok: false }; }
+      const label = sym.slice(1).toUpperCase();
+      try { const q = await fetchStockQuote(sym); return { sym, label, price: q.close, pct: q.pct, basis: q.basis, ok: true }; }
+      catch { return { sym, label, ok: false }; }
     }
     const d = crypto[sym.toLowerCase()];
-    if (d) return { sym, label: sym.toUpperCase(), price: d.usd, pct: d.usd_24h_change ?? 0, ok: true };
+    if (d) return { sym, label: sym.toUpperCase(), price: d.usd, pct: d.usd_24h_change ?? 0, basis: '24h', ok: true };
     return { sym, label: sym.toUpperCase(), ok: false };
   }));
+}
+
+async function refreshMarkets() {
+  const items = [...marketsListEl.querySelectorAll('.monitor-item')];
+  const quotes = await fetchMarketQuotes(items.map(li => li.dataset.symbol));
+  items.forEach((li, i) => {
+    const q = quotes[i];
+    const priceEl = li.querySelector('.market-price'); const chgEl = li.querySelector('.market-change');
+    if (!q.ok) { priceEl.textContent = 'n/a'; chgEl.textContent = ''; return; }
+    priceEl.textContent = fmtPrice(q.price);
+    setChange(chgEl, q.pct, q.basis);
+  });
+}
+function setChange(el, pct, basis) {
+  const sign = pct >= 0 ? '▲' : '▼';
+  el.textContent = `${sign} ${Math.abs(pct).toFixed(2)}%`;
+  el.className = 'market-change ' + (pct >= 0 ? 'up' : 'down');
+  el.title = BASIS_LABEL[basis] || '';
 }
 
 const tickerTapeEl = document.getElementById('ticker-tape');
@@ -1464,7 +1496,7 @@ async function renderTicker() {
     const arrow = q.pct >= 0 ? '▲' : '▼';
     const cls = q.pct >= 0 ? 'up' : 'down';
     const price = q.price < 1 ? q.price.toFixed(6) : q.price.toLocaleString(undefined, { maximumFractionDigits: 2 });
-    return `<span class="tt-item"${d}><span class="tt-sym">${esc(q.label)}</span> <span class="tt-price">$${price}</span> <span class="tt-chg ${cls}">${arrow}${Math.abs(q.pct).toFixed(2)}%</span></span>`;
+    return `<span class="tt-item"${d}><span class="tt-sym">${esc(q.label)}</span> <span class="tt-price">$${price}</span> <span class="tt-chg ${cls}" title="${esc(BASIS_LABEL[q.basis] || '')}">${arrow}${Math.abs(q.pct).toFixed(2)}%</span></span>`;
   });
   const run = parts.join('<span class="tt-sep">·</span>');
   tickerTapeEl.classList.remove('hidden');
@@ -1482,10 +1514,10 @@ const marketBody = document.getElementById('market-modal-body');
 const marketLinks = document.getElementById('market-modal-links');
 
 function fmtPrice(p) { return '$' + (p < 1 ? Number(p).toFixed(6) : Number(p).toLocaleString(undefined, { maximumFractionDigits: 2 })); }
-function quoteBreakdownHtml({ name, price, pct, rows, asof }) {
+function quoteBreakdownHtml({ name, price, pct, basis, rows, asof }) {
   const cls = pct >= 0 ? 'up' : 'down'; const arrow = pct >= 0 ? '▲' : '▼';
   return `<div class="md-name">${esc(name)}</div>
-    <div class="md-price">${fmtPrice(price)} <span class="market-change ${cls}">${arrow}${Math.abs(pct).toFixed(2)}%</span></div>
+    <div class="md-price">${fmtPrice(price)} <span class="market-change ${cls}">${arrow}${Math.abs(pct).toFixed(2)}%</span> <small class="muted">${esc(BASIS_LABEL[basis] || '')}</small></div>
     <div class="md-rows">${rows.filter(r => r[1] != null && r[1] !== '').map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(String(v))}</b></div>`).join('')}</div>
     ${asof ? `<div class="md-asof">as of ${esc(asof)}</div>` : ''}`;
 }
@@ -1501,16 +1533,11 @@ async function openMarketModal(sym) {
   marketModal.classList.remove('hidden');
   try {
     if (isStock) {
-      let t = sym.slice(1).toLowerCase(); if (!t.includes('.')) t += '.us';
-      const res = await fetch(`https://stooq.com/q/l/?s=${encodeURIComponent(t)}&f=sd2t2ohlcvn&h&e=csv`, { cache: 'no-store' });
-      const row = ((await res.text()).trim().split('\n')[1] || '').split(',');
-      const [, date, , open, high, low, close, vol, ...nameParts] = row;
-      const o = +open, h = +high, l = +low, c = +close;
-      if (!isFinite(c)) throw new Error('no quote (check symbol; non-US needs a suffix)');
-      const name = (nameParts.join(',') || sym.slice(1).toUpperCase()).replace(/^"|"$/g, '');
-      const pct = o ? ((c - o) / o) * 100 : 0;
+      const t = stooqTicker(sym);
+      const q = await fetchStockQuote(sym);
+      const name = q.name || sym.slice(1).toUpperCase();
       const base = encodeURIComponent(t.replace(/\.us$/, '').toUpperCase());
-      marketBody.innerHTML = quoteBreakdownHtml({ name, price: c, pct, asof: date, rows: [['Open', fmtPrice(o)], ['Day High', fmtPrice(h)], ['Day Low', fmtPrice(l)], ['Volume', isFinite(+vol) ? (+vol).toLocaleString() : vol]] });
+      marketBody.innerHTML = quoteBreakdownHtml({ name, price: q.close, pct: q.pct, basis: q.basis, asof: q.date, rows: [['Prev Close', q.prevClose != null ? fmtPrice(q.prevClose) : ''], ['Open', q.open != null ? fmtPrice(q.open) : ''], ['Day High', q.high != null ? fmtPrice(q.high) : ''], ['Day Low', q.low != null ? fmtPrice(q.low) : ''], ['Volume', q.volume != null ? q.volume.toLocaleString() : '']] });
       marketLinks.innerHTML = marketLinksHtml([
         ['Yahoo Finance', `https://finance.yahoo.com/quote/${base}`],
         ['Google News', `https://news.google.com/search?q=${encodeURIComponent(name + ' stock')}`],
@@ -1522,7 +1549,7 @@ async function openMarketModal(sym) {
       const arr = await safeFetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${encodeURIComponent(sym.toLowerCase())}`);
       const d = arr?.[0]; if (!d) throw new Error('no quote (check the CoinGecko id)');
       marketBody.innerHTML = quoteBreakdownHtml({
-        name: d.name, price: d.current_price, pct: d.price_change_percentage_24h ?? 0,
+        name: d.name, price: d.current_price, pct: d.price_change_percentage_24h ?? 0, basis: '24h',
         rows: [['24h High', fmtPrice(d.high_24h)], ['24h Low', fmtPrice(d.low_24h)], ['Market Cap', '$' + (d.market_cap || 0).toLocaleString()], ['Rank', d.market_cap_rank ? '#' + d.market_cap_rank : '']]
       });
       marketLinks.innerHTML = marketLinksHtml([
@@ -1592,11 +1619,26 @@ const DEFAULT_LINKS = [
 async function seedDefaults() {
   const d = await syncGet('seeded');
   if (d.seeded) return;
-  const cur = await syncGet(['todos', 'links']);
-  const patch = { seeded: true };
+  const cur = await localGet(['todos', 'links']);
+  const patch = {};
   if (!(cur.todos && cur.todos.length)) patch.todos = DEFAULT_TODOS;
   if (!(cur.links && cur.links.length)) patch.links = DEFAULT_LINKS;
-  await syncSet(patch);
+  await localSet(patch);
+  await syncSet({ seeded: true });
+}
+
+// Tasks and shortcuts used to live in sync storage, which caps each item at 8 KB, so long
+// lists stopped saving. Move them to local storage once.
+async function migrateListsToLocal() {
+  const [s, l] = await Promise.all([syncGet(['todos', 'links']), localGet(['todos', 'links'])]);
+  const patch = {};
+  if (s.todos && !l.todos) patch.todos = s.todos;
+  if (s.links && !l.links) patch.links = s.links;
+  if (Object.keys(patch).length) await localSet(patch);
+  if (s.todos || s.links) await syncStore.remove(['todos', 'links']);
+  // Drop the per-config news caches older versions left behind.
+  const stale = Object.keys(await localStore.getAll()).filter(k => /^news(Time)?_/.test(k));
+  if (stale.length) await localStore.remove(stale);
 }
 
 // One-time: union the expanded default watchlist into any existing one.
@@ -1617,6 +1659,7 @@ async function init() {
 
   await loadSettings();
   _greetingPart = ''; updateTime(); // re-pick the greeting with the saved name
+  await migrateListsToLocal();
   await seedDefaults();
   await seedMarkets();
 

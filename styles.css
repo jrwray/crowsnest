@@ -341,6 +341,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 .status-up { background: var(--primary); box-shadow: 0 0 8px var(--primary-glow); }
 .status-down { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
 .status-pending { background: var(--amber); animation: pulse 1s ease infinite; }
+.status-reachable { background: var(--amber); }
 @keyframes pulse { 50% { opacity: 0.35; } }
 .market-change { font-family: var(--font-term); font-size: 12px; }
 .market-change.up { color: var(--primary); } .market-change.down { color: var(--danger); }
