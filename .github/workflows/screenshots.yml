@@ -1,0 +1,43 @@
+name: Screenshots
+
+# Renders the dashboard with live feeds and saves README screenshots plus a demo GIF
+# as a workflow artifact. Run it from the Actions tab after UI changes.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'styles.css'
+      - 'src/**'
+      - 'tools/screenshot.mjs'
+      - '.github/workflows/screenshots.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Playwright
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Build demo site
+        run: tools/build-site.sh _site
+      - name: Take screenshots
+        run: node tools/screenshot.mjs _site shots
+      - name: Make demo GIF
+        run: |
+          sudo apt-get install -y ffmpeg >/dev/null
+          video=$(ls shots/*.webm | head -1)
+          ffmpeg -loglevel error -i "$video" -vf "fps=12,scale=960:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128[p];[b][p]paletteuse=dither=bayer" shots/demo.gif
+          rm shots/*.webm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: shots/
