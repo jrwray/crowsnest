@@ -38,7 +38,8 @@ jobs:
         run: |
           sudo apt-get install -y ffmpeg >/dev/null
           video=$(ls shots/*.webm | head -1)
-          ffmpeg -loglevel error -i "$video" -vf "fps=12,scale=960:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128[p];[b][p]paletteuse=dither=bayer" shots/demo.gif
+          ffmpeg -loglevel error -ss 6 -i "$video" -vf "fps=8,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=64:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle" shots/demo.gif
+          ls -lh shots
           rm shots/*.webm
       - uses: actions/upload-artifact@v4
         with:
