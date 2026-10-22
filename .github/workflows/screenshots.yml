@@ -1,7 +1,8 @@
 name: Screenshots
 
-# Renders the dashboard with live feeds and saves README screenshots plus a demo GIF
-# as a workflow artifact. Run it from the Actions tab after UI changes.
+# Renders the dashboard with live feeds, then commits the README screenshot and demo GIF
+# to the branch it ran on (and uploads them as an artifact). Run it from the Actions tab
+# after UI changes, or let it run on a PR that touches the UI.
 on:
   workflow_dispatch:
   pull_request:
@@ -13,13 +14,15 @@ on:
       - '.github/workflows/screenshots.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   screenshots:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -41,3 +44,16 @@ jobs:
         with:
           name: screenshots
           path: shots/
+
+      - name: Commit screenshots to the branch
+        # Only for branches in this repo; pushes made with GITHUB_TOKEN don't re-trigger workflows.
+        if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          cp shots/dark.png docs/screenshots/dark.png
+          cp shots/demo.gif docs/screenshots/demo.gif
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots
+          if git diff --cached --quiet; then echo "No changes"; exit 0; fi
+          git commit -m "Update README screenshots with live data"
+          git push

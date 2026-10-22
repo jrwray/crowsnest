@@ -16,6 +16,13 @@ News feeds, market ticker, weather, tasks, notes, uptime monitors, tab sets, mus
 
 </div>
 
+<details>
+<summary>Short demo (GIF)</summary>
+
+<img src="docs/screenshots/demo.gif" alt="Scrolling the feeds and switching between dark and light themes" width="860">
+
+</details>
+
 ## Features
 
 - **Feeds**: Lobsters, Lemmy, DEV, GNews, Hacker News, Reddit, Product Hunt, built-in RSS (TechCrunch, The Verge, Ars Technica, and more), plus your own RSS URLs. Toggle and size each source.
