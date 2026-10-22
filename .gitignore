@@ -21,3 +21,6 @@ crowsnest-backup*.json
 
 # Node (if tooling is added later)
 node_modules/
+
+_site/
+shots/

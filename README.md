@@ -8,11 +8,20 @@ News feeds, market ticker, weather, tasks, notes, uptime monitors, tab sets, mus
 ![Manifest V3](https://img.shields.io/badge/Chrome-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white)
 ![No build step](https://img.shields.io/badge/build-none-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
+[![CI](https://github.com/jrwray/crowsnest/actions/workflows/ci.yml/badge.svg)](https://github.com/jrwray/crowsnest/actions/workflows/ci.yml)
 
-<!-- Screenshot taken offline; swap in one with live feeds when you can. -->
+**[Try the live demo](https://jrwray.github.io/crowsnest/)** in your browser, no install needed.
+
 <img src="docs/screenshots/dark.png" alt="Crowsnest new tab in dark mode" width="860">
 
 </div>
+
+<details>
+<summary>Short demo (GIF)</summary>
+
+<img src="docs/screenshots/demo.gif" alt="Scrolling the feeds and switching between dark and light themes" width="860">
+
+</details>
 
 ## Features
 
@@ -40,6 +49,8 @@ Crowsnest is not on the Chrome Web Store yet. Load it unpacked:
 4. Open a new tab.
 
 Works in Chrome, Edge, Brave, and other Chromium browsers.
+
+The [live demo](https://jrwray.github.io/crowsnest/) runs the same code as a plain web page, saving to `localStorage` instead of `chrome.storage`. A few sources don't allow requests from web pages, so some feeds only fill in when it runs as the extension.
 
 ## Configuration
 
@@ -76,9 +87,11 @@ background.js     Service worker: right-click "search selection" menu
 maps-content.js   Content script: acreage on Google Maps measurements
 vendor/quill/     Vendored Quill 1.3.7 rich-text editor (BSD-3-Clause)
 test/             Unit tests (Node's built-in test runner)
+tools/            Demo site build and screenshot scripts (CI only)
+demo/             Banner added to the GitHub Pages demo
 ```
 
-No build step and no dependencies to install. Edit a file, then click the reload icon on `chrome://extensions`. To run the checks CI runs, use `npm test` and `npm run lint` (Node 20+).
+No build step and no dependencies to install. Edit a file, then click the reload icon on `chrome://extensions`. To run the checks CI runs, use `npm test` and `npm run lint` (Node 20+). The **Screenshots** workflow renders the page with live data and saves fresh README screenshots and a demo GIF as an artifact.
 
 ## Contributing
 

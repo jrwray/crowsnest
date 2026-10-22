@@ -1,0 +1,60 @@
+name: Screenshots
+
+# Renders the dashboard with live feeds, then commits the README screenshot and demo GIF
+# to the branch it ran on (and uploads them as an artifact). Run it from the Actions tab
+# after UI changes, or let it run on a PR that touches the UI.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'styles.css'
+      - 'src/**'
+      - 'tools/screenshot.mjs'
+      - '.github/workflows/screenshots.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Playwright
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Build demo site
+        run: tools/build-site.sh _site
+      - name: Take screenshots
+        run: node tools/screenshot.mjs _site shots
+      - name: Make demo GIF
+        run: |
+          sudo apt-get install -y ffmpeg >/dev/null
+          video=$(ls shots/*.webm | head -1)
+          ffmpeg -loglevel error -ss 6 -i "$video" -vf "fps=8,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=64:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle" shots/demo.gif
+          ls -lh shots
+          rm shots/*.webm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: shots/
+
+      - name: Commit screenshots to the branch
+        # Only for branches in this repo; pushes made with GITHUB_TOKEN don't re-trigger workflows.
+        if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          cp shots/dark.png docs/screenshots/dark.png
+          cp shots/demo.gif docs/screenshots/demo.gif
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots
+          if git diff --cached --quiet; then echo "No changes"; exit 0; fi
+          git commit -m "Update README screenshots with live data"
+          git push
